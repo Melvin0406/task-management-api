@@ -1,0 +1,23 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: taskapi-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: taskapi
+      MYSQL_DATABASE: taskapi
+    ports:
+      # 3307 is already taken by another local project, so this one uses 3308.
+      - "3308:3306"
+    command: >
+      --innodb-buffer-pool-size=64M
+      --local-infile=0
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-ptaskapi"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - taskapi-mysql-data:/var/lib/mysql
+
+volumes:
+  taskapi-mysql-data:
