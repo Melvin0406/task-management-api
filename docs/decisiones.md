@@ -47,6 +47,26 @@ tarda más que la transacción entera, así que nunca se solapan y la versión s
 pasaba. Hay que dispararlas desde el mismo proceso con `Promise.all`. Un test de concurrencia que no
 solapa de verdad no prueba nada, y se ve idéntico a uno que sí.
 
+## La respuesta reproducida se guarda como bytes, no como JSON
+
+El enunciado pide que las dos respuestas sean **idénticas**. Guardando la respuesta en una columna
+`JSON`, **MySQL normaliza el orden de las llaves**, así que la reproducida volvía con los mismos
+valores en otro orden: equivalente, pero no idéntica.
+
+Se cambió `response_body` a `LONGTEXT` (migración `002`) y se guardan **los bytes exactos que se
+enviaron la primera vez**. Por eso `runIdempotent` devuelve el cuerpo ya serializado y no el objeto:
+así los dos caminos —hacer el trabajo y reproducir— emiten la misma cadena por construcción, no por
+coincidencia.
+
+## Los errores no se memorizan
+
+Si el trabajo falla, la transacción se revierte y **la fila de la llave se revierte con ella**, así
+que la llave queda libre. Un `POST` que falló con 404 se puede reintentar con la misma llave.
+
+Es un supuesto: Stripe sí guarda las respuestas de error. Se eligió lo contrario porque el enunciado
+sólo exige que una operación repetida **se ejecute una sola vez**, y liberar la llave ante un fallo
+es más útil para el cliente que congelarle un error.
+
 ## Decisiones de arquitectura
 
 - **Capas `routes → controllers → services → repositories`.** Es la estructura que operé en
@@ -96,7 +116,7 @@ solapa de verdad no prueba nada, y se ve idéntico a uno que sí.
 - [ ] **`NOTIFY_URL` en el servidor es un placeholder.** Hay que ponerle una URL real de
       `webhook.site` antes de entregar, o la notificación de F4 no tendrá a dónde llegar en la demo.
 - [x] ~~Archivado exactamente una vez~~ (F2, con contraprueba).
-- [ ] Idempotencia por `Idempotency-Key` (F3).
+- [x] ~~Idempotencia por `Idempotency-Key`~~ (F3).
 - [ ] Notificaciones con reintentos (F4).
 - [ ] Decidir la mejora adicional al final, no antes.
 - [ ] Diagrama Mermaid del modelo de datos.
@@ -132,3 +152,14 @@ solapa de verdad no prueba nada, y se ve idéntico a uno que sí.
   La zona horaria del driver quedó fijada en `Z` en vez del default `local`, porque el payload de la
   notificación lleva timestamp ISO terminado en Z y dejarlo implícito hace que cada timestamp
   dependa de la máquina que corra el proceso.
+
+- **2026-08-25 — F3.** Idempotencia. El índice único sobre `idem_key` hace de mutex: no se consulta
+  antes de insertar, porque consultar pierde justo la carrera que el enunciado exige ganar.
+
+  Los servicios se refactorizaron para recibir la conexión en vez de abrir su propia transacción, de
+  modo que el trabajo de negocio y el registro de la llave hagan commit o rollback juntos.
+
+  **Verificado:** misma llave en paralelo, 12 de 12 rondas con respuestas byte a byte idénticas y 12
+  tareas creadas de 24 peticiones. Más: misma llave secuencial, cuerpo distinto → 409, otro endpoint
+  → 409, sin header → dos tareas distintas, y misma llave en `/complete` en paralelo → una sola
+  notificación encolada.
