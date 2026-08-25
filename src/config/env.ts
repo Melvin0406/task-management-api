@@ -21,7 +21,11 @@ export const env = {
     url: required('NOTIFY_URL'),
     timeoutMs: Number(process.env.NOTIFY_TIMEOUT_MS ?? 5000),
     maxAttempts: 3,
-    // Increasing waits between attempts, as required by the brief.
-    backoffMs: [1_000, 4_000, 16_000],
+    // Increasing waits between attempts, as required by the brief. Configurable
+    // mainly so the tests can use milliseconds instead of spending 21 seconds
+    // per retry scenario.
+    backoffMs: (process.env.NOTIFY_BACKOFF_MS ?? '1000,4000,16000')
+      .split(',')
+      .map((value) => Number(value.trim())),
   },
 } as const;

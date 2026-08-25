@@ -27,10 +27,34 @@ curl http://localhost:3000/health
 ## Tests
 
 ```bash
+docker compose up -d    # hace falta MySQL corriendo
 npm test
 ```
 
-_(Pendiente — F6.)_
+**42 tests de integración sobre HTTP.** Usan su propia base (`taskapi_test`), que se crea y se migra
+sola, así que correrlos nunca toca los datos de desarrollo.
+
+Se dividen en dos archivos:
+
+- `tests/endpoints.test.ts` — los nueve endpoints, su validación y sus errores.
+- `tests/reliability.test.ts` — **la sección de Confiabilidad**, que es lo que no se puede verificar
+  leyendo el código.
+
+**Los tests concurrentes disparan sus peticiones con `Promise.all` contra un único servidor
+levantado**, para que estén de verdad en vuelo al mismo tiempo. No se usó supertest justamente por
+eso: levanta un servidor efímero por llamada, lo que serializa las peticiones en silencio y hace que
+el test pase exista o no el candado que pretende probar.
+
+**Se comprobó que estos tests fallan si se quita lo que prueban**, que es la única forma de saber que
+miden algo:
+
+| Cambio | Resultado |
+|---|---|
+| Quitar el `SELECT ... FOR UPDATE` | Fallan los 2 tests de archivado concurrente |
+| Idempotencia ingenua (consultar y luego insertar) | **El test secuencial sigue pasando**; fallan sólo los 2 en paralelo |
+
+Ese segundo caso es el interesante: la versión ingenua se ve correcta hasta que las peticiones se
+solapan.
 
 ---
 

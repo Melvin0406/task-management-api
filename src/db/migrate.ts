@@ -13,13 +13,13 @@ const MIGRATIONS_DIR = path.resolve(__dirname, '../../migrations');
  * for a migration framework. Plain .sql files keep the schema readable for
  * whoever reviews this, which a framework's generated migrations would not.
  */
-async function migrate(): Promise<void> {
+export async function runMigrations(database = env.db.database): Promise<void> {
   const conn = await mysql.createConnection({
     host: env.db.host,
     port: env.db.port,
     user: env.db.user,
     password: env.db.password,
-    database: env.db.database,
+    database,
     multipleStatements: true,
     timezone: 'Z',
   });
@@ -57,7 +57,11 @@ async function migrate(): Promise<void> {
   }
 }
 
-migrate().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+// Only self-executes when run as a script, so the test setup can import and
+// call runMigrations() directly.
+if (require.main === module) {
+  runMigrations().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

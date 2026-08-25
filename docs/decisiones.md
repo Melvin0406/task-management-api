@@ -163,7 +163,7 @@ clásica del `LEFT JOIN` con condición.
 - [x] ~~Notificaciones con reintentos~~ (F4).
 - [ ] Decidir la mejora adicional al final, no antes.
 - [ ] Diagrama Mermaid del modelo de datos.
-- [ ] Tests automatizados en Vitest (F6).
+- [x] ~~Tests automatizados en Vitest~~ (F6).
 
 ---
 
@@ -223,3 +223,17 @@ clásica del `LEFT JOIN` con condición.
   tarea archivada, **tarea sin ningún asignado** (aparece igual, gracias al `LEFT JOIN`), y usuarios
   sin pendientes (que siguen apareciendo porque la condición va en el `ON`). Filtro `?status`
   inválido → 400, usuario o tarea inexistente → 404.
+
+- **2026-08-25 — F6.** 42 tests de integración sobre HTTP, en base propia (`taskapi_test`) que se
+  crea y migra sola.
+
+  **Sin supertest, a propósito:** levanta un servidor efímero por llamada, lo que serializa las
+  peticiones y haría que los tests de concurrencia pasaran exista o no el mecanismo que prueban. En
+  su lugar, un servidor levantado para toda la suite y un cliente `fetch`.
+
+  **El backoff se hizo configurable por entorno** (`NOTIFY_BACKOFF_MS`) porque con 1s/4s/16s cada
+  escenario de reintento tardaría 21 segundos.
+
+  **Verificado que los tests fallan al quitar lo que prueban:** sin `FOR UPDATE` caen los 2 de
+  archivado concurrente; con idempotencia ingenua el test secuencial **sigue pasando** y caen sólo
+  los 2 en paralelo.
