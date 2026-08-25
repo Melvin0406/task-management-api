@@ -1,0 +1,6 @@
+# Authored on Windows, executed on Linux. Without this, a shell script checked
+# out with CRLF fails on the server as: bad interpreter: /usr/bin/env bash^M
+* text=auto eol=lf
+*.sh   text eol=lf
+*.sql  text eol=lf
+Dockerfile text eol=lf
