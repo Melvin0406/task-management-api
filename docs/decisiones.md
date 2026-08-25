@@ -21,6 +21,32 @@ avisa que hay que defender cada decisión como propia.
 | Tests | Vitest + supertest | Vitest es el único framework de tests con el que he trabajado antes. |
 | Idioma | Código en inglés, README en español | Inglés es el default de la industria y mantiene el repo útil como portafolio; el README va en español porque es el idioma de este proceso. |
 
+## El candado de `complete`, y por qué está probado y no supuesto
+
+`POST /tasks/:id/complete` toma un `SELECT ... FOR UPDATE` sobre la tarea en su primer statement.
+La justificación **no** es la que parece. El riesgo obvio es archivar dos veces; el riesgo real es
+**no archivar nunca**.
+
+Bajo `REPEATABLE READ`, que es el default de MySQL, dos transacciones concurrentes leen cada una un
+snapshot tomado antes de que la otra hiciera commit. Las dos cuentan una parte pendiente, las dos
+deciden no archivar, y la tarea se queda abierta para siempre con todo terminado. Es un bug
+silencioso: nadie recibe un error.
+
+**Comprobado quitando el `FOR UPDATE` y volviendo a correr la carrera:**
+
+| | Rondas correctas |
+|---|---|
+| Con `FOR UPDATE` | **15 de 15** |
+| Sin `FOR UPDATE` | **0 de 15** — `archivedNow=0`, las dos respuestas con estado `open` |
+
+Falla en la dirección predicha: la tarea **nunca** se archiva.
+
+**Y un aviso sobre cómo medirlo**, porque el primer intento de prueba dio un falso positivo. Lanzar
+las dos peticiones con dos `curl` en segundo plano **no** provoca la carrera: arrancar cada proceso
+tarda más que la transacción entera, así que nunca se solapan y la versión sin candado también
+pasaba. Hay que dispararlas desde el mismo proceso con `Promise.all`. Un test de concurrencia que no
+solapa de verdad no prueba nada, y se ve idéntico a uno que sí.
+
 ## Decisiones de arquitectura
 
 - **Capas `routes → controllers → services → repositories`.** Es la estructura que operé en
@@ -54,13 +80,24 @@ avisa que hay que defender cada decisión como propia.
 - **`description` ausente y `description: null` se guardan igual.** El enunciado la marca opcional.
 - **Los strings se recortan antes de validar**, así que un título de puros espacios es 400 y no una
   tarea con título en blanco.
+- **Un id de ruta no numérico es 400, no 404.** El recurso no falta: la petición nunca nombró uno.
+- **`assign` sobre una tarea archivada → 409 `TASK_ALREADY_ARCHIVED`.** Asignar a alguien una tarea
+  ya cerrada dejaría la tarea archivada con una parte que nadie hizo, o sea un estado incoherente.
+- **`assign` valida los usuarios como conjunto** y nombra todos los inexistentes de una vez, en vez
+  de obligar al cliente a descubrirlos de uno en uno.
+- **`userIds` se deduplica.** `[1, 1, 2]` no es un error del cliente: la intención es inequívoca.
+- **Repetir `complete` es éxito, no error.** Y eso cubre también el reintento que llega cuando la
+  tarea ya se archivó: una tarea archivada es, por definición, una donde todas las partes están
+  hechas. Sin esto, el reintento del último usuario recibiría un 409 por hacer algo que ya logró.
 
 
 ## Notas de implementación pendientes
 
 - [ ] **`NOTIFY_URL` en el servidor es un placeholder.** Hay que ponerle una URL real de
       `webhook.site` antes de entregar, o la notificación de F4 no tendrá a dónde llegar en la demo.
-- [ ] Los tres requisitos de Confiabilidad (idempotencia, archivado, reintentos).
+- [x] ~~Archivado exactamente una vez~~ (F2, con contraprueba).
+- [ ] Idempotencia por `Idempotency-Key` (F3).
+- [ ] Notificaciones con reintentos (F4).
 - [ ] Decidir la mejora adicional al final, no antes.
 - [ ] Diagrama Mermaid del modelo de datos.
 
@@ -87,3 +124,11 @@ avisa que hay que defender cada decisión como propia.
   Medido en el servidor: 569 MB usados de 961, MySQL en 215 MB con `performance-schema` apagado.
   Eso confirma que la caja de 512 MB no alcanzaba. Tras un `reboot` la pila vuelve sola en ~40 s con
   los datos intactos, y `certbot renew --dry-run` pasa.
+
+- **2026-08-24 — F2.** `assign` y `complete`, con el candado sobre la tarea y el archivado
+  exactamente una vez. Ambos endpoints toman el mismo candado: sin él en `assign`, asignar a alguien
+  podría entrelazarse con la última completación y dejar la tarea archivada con una parte pendiente.
+
+  La zona horaria del driver quedó fijada en `Z` en vez del default `local`, porque el payload de la
+  notificación lleva timestamp ISO terminado en Z y dejarlo implícito hace que cada timestamp
+  dependa de la máquina que corra el proceso.

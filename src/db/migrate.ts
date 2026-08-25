@@ -21,6 +21,7 @@ async function migrate(): Promise<void> {
     password: env.db.password,
     database: env.db.database,
     multipleStatements: true,
+    timezone: 'Z',
   });
 
   try {

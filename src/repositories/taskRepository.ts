@@ -82,3 +82,24 @@ export async function listTaskRows(
   );
   return rows as TaskRow[];
 }
+
+/**
+ * Archives a task, and reports whether *this* call is the one that did it.
+ *
+ * The `status = 'open'` predicate is the guard: however many transactions run
+ * this, only one can see affectedRows === 1. That one, and only that one, is
+ * responsible for queuing the notification, which is what makes archiving and
+ * notifying happen exactly once.
+ */
+export async function archiveTask(
+  conn: Executor,
+  id: number,
+): Promise<boolean> {
+  const [result] = await conn.execute<ResultSetHeader>(
+    `UPDATE tasks
+        SET status = 'archived', archived_at = UTC_TIMESTAMP()
+      WHERE id = ? AND status = 'open'`,
+    [id],
+  );
+  return result.affectedRows === 1;
+}

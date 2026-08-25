@@ -24,6 +24,15 @@ export const errors = {
   userNotFound: (id: number | string) =>
     new AppError('USER_NOT_FOUND', 404, `User ${id} does not exist`),
 
+  usersNotFound: (ids: number[]) =>
+    new AppError(
+      'USER_NOT_FOUND',
+      404,
+      ids.length === 1
+        ? `User ${ids[0]} does not exist`
+        : `These users do not exist: ${ids.join(', ')}`,
+    ),
+
   taskNotFound: (id: number | string) =>
     new AppError('TASK_NOT_FOUND', 404, `Task ${id} does not exist`),
 

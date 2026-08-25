@@ -9,6 +9,11 @@ export const pool = mysql.createPool({
   database: env.db.database,
   waitForConnections: true,
   connectionLimit: 10,
+  // Pinned instead of left to the driver default of 'local'. The server runs in
+  // UTC, and the notification payload the brief specifies carries an ISO-8601
+  // timestamp ending in Z. Leaving this implicit makes every stored timestamp
+  // depend on the timezone of whatever machine happens to run the process.
+  timezone: 'Z',
 });
 
 /**
