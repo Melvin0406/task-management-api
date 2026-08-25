@@ -237,3 +237,13 @@ clásica del `LEFT JOIN` con condición.
   **Verificado que los tests fallan al quitar lo que prueban:** sin `FOR UPDATE` caen los 2 de
   archivado concurrente; con idempotencia ingenua el test secuencial **sigue pasando** y caen sólo
   los 2 en paralelo.
+
+- **2026-08-25 — F7.** CI en cada push (typecheck y los 42 tests, contra un MySQL 8.4 real) y
+  despliegue **a disparo manual**.
+
+  **Por qué manual y no automático:** el reto compromete la URL pública durante 7 días. Desplegar en
+  cada commit dejaría esa ventana a merced de cualquier push, y un despliegue roto se leería como
+  "la API está caída" y no como "ese commit estaba mal". Promover a producción es una decisión.
+
+  El job **verifica la URL pública por HTTPS** al terminar, no sólo que el contenedor levantó.
+  Probado de punta a punta: despliegue disparado desde Actions, verificación en verde.

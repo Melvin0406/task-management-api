@@ -1,5 +1,7 @@
 # Task Management API
 
+[![CI](https://github.com/Melvin0406/task-management-api/actions/workflows/ci.yml/badge.svg)](https://github.com/Melvin0406/task-management-api/actions/workflows/ci.yml)
+
 API REST de gestión de trabajo colaborativo: tareas asignadas a varias personas, que se archivan
 automáticamente y notifican a un sistema externo cuando todos los asignados terminan su parte.
 
@@ -105,6 +107,13 @@ picos de memoria.
 
 Scripts en [`deploy/`](deploy/): `setup-server.sh` (bootstrap, idempotente) y `deploy.sh`
 (actualizar y migrar).
+
+**CI/CD.** [`ci.yml`](.github/workflows/ci.yml) corre typecheck y los 42 tests en cada push, contra
+un contenedor real de MySQL 8.4 — no un doble, porque lo que se prueba es comportamiento de InnoDB.
+[`deploy.yml`](.github/workflows/deploy.yml) despliega **a disparo manual, no en cada push**: el reto
+compromete la URL pública por 7 días, y automatizar el despliegue en cada commit dejaría esa ventana
+a merced de cualquier push. El job verifica la URL pública con HTTPS al terminar, no sólo el
+contenedor.
 
 ---
 
