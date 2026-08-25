@@ -1,0 +1,60 @@
+name: Deploy
+
+# Manual on purpose, not on every push to main.
+#
+# The brief commits the public URL to staying available for the seven days
+# after delivery. Auto-deploying every commit would put that window at the
+# mercy of any push, and a broken deploy would look like the API is down
+# rather than like a bad commit. CI still runs on every push; promoting to
+# production is a decision.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or commit to deploy
+        required: false
+        default: main
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy to the droplet
+    runs-on: ubuntu-latest
+    environment: production
+
+    env:
+      HOST: 167.99.2.144
+
+    steps:
+      - name: Set up the deploy key
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes root@"$HOST" \
+            "cd /opt/task-management-api && git fetch --all --prune && git checkout ${{ inputs.ref }} && bash deploy/deploy.sh"
+
+      - name: Verify the public URL
+        run: |
+          set -e
+          for attempt in $(seq 1 20); do
+            if curl -fsS https://167-99-2-144.sslip.io/health | tee /tmp/health | grep -q '"status":"ok"'; then
+              echo "healthy: $(cat /tmp/health)"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "the public URL did not come back healthy" >&2
+          exit 1
+
+      - name: Clean up
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
