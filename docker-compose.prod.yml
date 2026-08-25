@@ -1,0 +1,41 @@
+# Production stack. Nginx and certbot live on the host, not here, so that
+# certbot's own systemd timer owns certificate renewal: the brief requires the
+# public URL to stay up for 7 unattended days after delivery.
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: taskapi-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    command: >
+      --performance-schema=OFF
+      --innodb-buffer-pool-size=64M
+      --local-infile=0
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${DB_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    volumes:
+      - taskapi-mysql-data:/var/lib/mysql
+
+  api:
+    build: .
+    container_name: taskapi-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+    depends_on:
+      mysql:
+        condition: service_healthy
+    # Bound to loopback: the only way in from the internet is through nginx.
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  taskapi-mysql-data:
