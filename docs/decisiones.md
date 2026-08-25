@@ -58,6 +58,8 @@ avisa que hay que defender cada decisión como propia.
 
 ## Notas de implementación pendientes
 
+- [ ] **`NOTIFY_URL` en el servidor es un placeholder.** Hay que ponerle una URL real de
+      `webhook.site` antes de entregar, o la notificación de F4 no tendrá a dónde llegar en la demo.
 - [ ] Los tres requisitos de Confiabilidad (idempotencia, archivado, reintentos).
 - [ ] Decidir la mejora adicional al final, no antes.
 - [ ] Diagrama Mermaid del modelo de datos.
@@ -75,4 +77,13 @@ avisa que hay que defender cada decisión como propia.
   validación. Nginx y certbot van en el host y no en compose, porque certbot instala su propio timer
   de renovación y el requisito es que la URL siga viva 7 días sin supervisión.
 
-  **Falta desplegar:** el droplet quedó registrado con una llave SSH que no está en esta máquina.
+  **F1 cerrada:** desplegada en <https://167-99-2-144.sslip.io> con TLS de Let's Encrypt.
+
+  El acceso costó un rodeo que vale la pena anotar: la llave del droplet no fallaba por ser la
+  equivocada, sino porque **`id_ed25519` tiene passphrase** y sin agente SSH no se puede abrir de
+  forma no interactiva. Se resolvió con una llave dedicada y sin passphrase, acotada a este droplet
+  desechable, en vez de quitarle la passphrase a la llave personal.
+
+  Medido en el servidor: 569 MB usados de 961, MySQL en 215 MB con `performance-schema` apagado.
+  Eso confirma que la caja de 512 MB no alcanzaba. Tras un `reboot` la pila vuelve sola en ~40 s con
+  los datos intactos, y `certbot renew --dry-run` pasa.
