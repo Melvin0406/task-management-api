@@ -45,6 +45,16 @@ avisa que hay que defender cada decisión como propia.
   pase en silencio.
 - **Misma llave con body distinto → 409 `IDEMPOTENCY_KEY_REUSED`**, en vez de reproducir una
   respuesta que no corresponde. Para eso se guarda `request_hash`.
+- **Email repetido en `POST /users` → 409 `EMAIL_ALREADY_EXISTS`.** El enunciado no lo menciona.
+  Se resuelve dejando que decida el índice único y traduciendo el conflicto, en vez de consultar
+  antes: consultar primero pierde la carrera entre la consulta y el insert.
+- **Un campo no reconocido en el body es 400**, no se ignora. Un campo de más suele significar que
+  el cliente está llamando al endpoint equivocado o que algo se renombró, y fallar ruidosamente
+  cuesta menos que ignorarlo en silencio.
+- **`description` ausente y `description: null` se guardan igual.** El enunciado la marca opcional.
+- **Los strings se recortan antes de validar**, así que un título de puros espacios es 400 y no una
+  tarea con título en blanco.
+
 
 ## Notas de implementación pendientes
 
@@ -59,3 +69,10 @@ avisa que hay que defender cada decisión como propia.
 - **2026-08-24 — F0.** Andamio: TypeScript, Express, Docker Compose con MySQL 8.4, migraciones con
   el esquema completo, sobre de error único, `/health` y esqueleto del README. Sin endpoints de
   negocio todavía.
+
+- **2026-08-24 — F1, parte 1.** Artefactos de despliegue (Dockerfile multi-etapa, compose de
+  producción, bootstrap del servidor) y los dos POST de creación, con sus repositorios, servicios y
+  validación. Nginx y certbot van en el host y no en compose, porque certbot instala su propio timer
+  de renovación y el requisito es que la URL siga viva 7 días sin supervisión.
+
+  **Falta desplegar:** el droplet quedó registrado con una llave SSH que no está en esta máquina.
