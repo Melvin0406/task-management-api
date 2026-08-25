@@ -2,6 +2,7 @@ import express, { type Express } from 'express';
 import { healthRouter } from './routes/health';
 import { usersRouter } from './routes/users';
 import { tasksRouter } from './routes/tasks';
+import { notificationsRouter } from './routes/notifications';
 import { errorHandler, notFoundHandler } from './http/errorMiddleware';
 
 /**
@@ -16,6 +17,7 @@ export function createApp(): Express {
   app.use(healthRouter);
   app.use(usersRouter);
   app.use(tasksRouter);
+  app.use(notificationsRouter);
 
   // Order matters: 404 first, then the error formatter, and both after every
   // route.

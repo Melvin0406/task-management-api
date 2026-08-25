@@ -156,13 +156,12 @@ clásica del `LEFT JOIN` con condición.
 
 ## Notas de implementación pendientes
 
-- [ ] **`NOTIFY_URL` en el servidor es un placeholder.** Hay que ponerle una URL real de
-      `webhook.site` antes de entregar, o la notificación de F4 no tendrá a dónde llegar en la demo.
+- [x] ~~`NOTIFY_URL`~~ — apunta a un endpoint real y ya entregó desde producción.
 - [x] ~~Archivado exactamente una vez~~ (F2, con contraprueba).
 - [x] ~~Idempotencia por `Idempotency-Key`~~ (F3).
 - [x] ~~Notificaciones con reintentos~~ (F4).
-- [ ] Decidir la mejora adicional al final, no antes.
-- [ ] Diagrama Mermaid del modelo de datos.
+- [x] ~~Decidir la mejora adicional~~ — dead-letter con reenvío manual (F8).
+- [x] ~~Diagrama del modelo de datos~~ — `docs/modelo-de-datos.md`.
 - [x] ~~Tests automatizados en Vitest~~ (F6).
 
 ---
@@ -247,3 +246,23 @@ clásica del `LEFT JOIN` con condición.
 
   El job **verifica la URL pública por HTTPS** al terminar, no sólo que el contenedor levantó.
   Probado de punta a punta: despliegue disparado desde Actions, verificación en verde.
+
+- **2026-08-25 — F8.** La mejora, el UML y el README.
+
+  **Mejora: dead-letter con reenvío manual.** Cierra el hueco que el propio enunciado deja abierto —
+  tras 3 intentos fallidos la notificación se pierde en silencio. Reusa la tabla y el despachador que
+  ya existían: dos endpoints y un `UPDATE`. El reencolado usa `UPDATE ... WHERE state='exhausted'`,
+  la misma técnica que el resto del sistema, así que dos operadores concurrentes producen **un**
+  reencolado.
+
+  **Detalle no obvio:** el reintento otorga un ciclo nuevo de 3 intentos, pero
+  `notification_attempts.attempt_number` **numera de forma monótona entre ciclos**. Reiniciar la
+  numeración habría colisionado con el `UNIQUE (task_id, attempt_number)` y habría perdido el
+  historial. Migración `004`, con `manual_retries` para distinguir los ciclos.
+
+  **8 tests nuevos, 50 en total.** Los 42 previos siguen pasando, que es la condición explícita del
+  enunciado: la mejora no debe afectar lo requerido.
+
+  **El UML salió del README a `docs/modelo-de-datos.md`.** El enunciado pide *adjuntar* un UML, no
+  que viva en el README, y el README tiene un tope duro de 2 páginas — pasarse de él en un reto que
+  evalúa gestión de alcance es mala señal por sí solo.

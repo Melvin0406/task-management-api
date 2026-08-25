@@ -4,6 +4,7 @@ import {
   claimJob,
   findDueJobIds,
   finishJob,
+  nextAttemptNumber,
   recordAttempt,
   releaseStaleClaims,
   rescheduleJob,
@@ -67,7 +68,9 @@ async function processJob(id: number): Promise<void> {
   // Somebody else got it first, or it stopped being due.
   if (!job) return;
 
-  const attemptNumber = job.attemptsMade + 1;
+  // Monotonic across manual retries, so a re-queued job appends to the log
+  // instead of colliding with the attempt numbers of the previous cycle.
+  const attemptNumber = await nextAttemptNumber(pool, job.taskId);
   const result = await deliver(job.payload);
 
   await recordAttempt(
@@ -84,10 +87,12 @@ async function processJob(id: number): Promise<void> {
     return;
   }
 
-  const attemptsLeft = attemptNumber < env.notify.maxAttempts;
+  // Counted within the current cycle, not against the whole log: a manual
+  // retry is meant to grant a fresh budget.
+  const attemptsLeft = job.attemptsMade + 1 < env.notify.maxAttempts;
   if (result.retryable && attemptsLeft) {
     // Increasing waits: 1s, 4s, 16s.
-    await rescheduleJob(pool, job.id, env.notify.backoffMs[attemptNumber - 1] ?? 16_000);
+    await rescheduleJob(pool, job.id, env.notify.backoffMs[job.attemptsMade] ?? 16_000);
     return;
   }
 

@@ -91,6 +91,88 @@ export async function claimJob(conn: Executor, id: number): Promise<Notification
   };
 }
 
+/** Next number in the task's delivery log. Monotonic across manual retries, so
+ *  a new cycle appends instead of colliding with the previous one. */
+export async function nextAttemptNumber(conn: Executor, taskId: number): Promise<number> {
+  const [rows] = await conn.execute<RowDataPacket[]>(
+    `SELECT COALESCE(MAX(attempt_number), 0) + 1 AS next
+       FROM notification_attempts WHERE task_id = ?`,
+    [taskId],
+  );
+  return Number(rows[0]?.next ?? 1);
+}
+
+export interface DeadLetterRow {
+  jobId: number;
+  taskId: number;
+  taskTitle: string;
+  attemptsMade: number;
+  manualRetries: number;
+  totalAttemptsLogged: number;
+  lastAttemptAt: Date | null;
+  lastHttpStatus: number | null;
+}
+
+/** Jobs that ran out of attempts and would otherwise be lost silently. */
+export async function listDeadLetter(conn: Executor): Promise<DeadLetterRow[]> {
+  const [rows] = await conn.query<RowDataPacket[]>(`
+    SELECT j.id AS jobId, j.task_id AS taskId, t.title AS taskTitle,
+           j.attempts_made AS attemptsMade, j.manual_retries AS manualRetries,
+           COUNT(a.id) AS totalAttemptsLogged,
+           MAX(a.attempted_at) AS lastAttemptAt,
+           SUBSTRING_INDEX(GROUP_CONCAT(a.http_status ORDER BY a.attempt_number DESC), ',', 1) AS lastHttpStatus
+      FROM notification_jobs j
+      JOIN tasks t ON t.id = j.task_id
+      LEFT JOIN notification_attempts a ON a.task_id = j.task_id
+     WHERE j.state = 'exhausted'
+     GROUP BY j.id, j.task_id, t.title, j.attempts_made, j.manual_retries
+     ORDER BY j.id
+  `);
+  return rows.map((row) => ({
+    jobId: Number(row.jobId),
+    taskId: Number(row.taskId),
+    taskTitle: row.taskTitle as string,
+    attemptsMade: Number(row.attemptsMade),
+    manualRetries: Number(row.manualRetries),
+    totalAttemptsLogged: Number(row.totalAttemptsLogged),
+    lastAttemptAt: (row.lastAttemptAt as Date | null) ?? null,
+    lastHttpStatus: row.lastHttpStatus === null ? null : Number(row.lastHttpStatus),
+  }));
+}
+
+/**
+ * Puts an exhausted job back in the queue with a fresh cycle of attempts.
+ *
+ * The `state = 'exhausted'` predicate matters: it means only a job that really
+ * ran out can be re-queued, and that two operators clicking at the same time
+ * produce one re-queue, not two.
+ */
+export async function requeueExhaustedJob(conn: Executor, jobId: number): Promise<boolean> {
+  const [result] = await conn.execute<ResultSetHeader>(
+    `UPDATE notification_jobs
+        SET state = 'pending',
+            attempts_made = 0,
+            manual_retries = manual_retries + 1,
+            claimed_at = NULL,
+            next_attempt_at = UTC_TIMESTAMP()
+      WHERE id = ? AND state = 'exhausted'`,
+    [jobId],
+  );
+  return result.affectedRows === 1;
+}
+
+export async function findJobById(
+  conn: Executor,
+  jobId: number,
+): Promise<{ id: number; taskId: number; state: JobState } | null> {
+  const [rows] = await conn.execute<RowDataPacket[]>(
+    'SELECT id, task_id AS taskId, state FROM notification_jobs WHERE id = ?',
+    [jobId],
+  );
+  const row = rows[0];
+  return row ? { id: Number(row.id), taskId: Number(row.taskId), state: row.state as JobState } : null;
+}
+
 export async function recordAttempt(
   conn: Executor,
   taskId: number,

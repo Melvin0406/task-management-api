@@ -45,6 +45,17 @@ export const errors = {
   emailAlreadyExists: (email: string) =>
     new AppError('EMAIL_ALREADY_EXISTS', 409, `A user with email ${email} already exists`),
 
+  notificationJobNotFound: (id: number | string) =>
+    new AppError('NOTIFICATION_JOB_NOT_FOUND', 404, `Notification job ${id} does not exist`),
+
+  /** Only a job that genuinely ran out of attempts can be re-queued. */
+  notificationJobNotExhausted: (id: number | string, state: string) =>
+    new AppError(
+      'NOTIFICATION_JOB_NOT_EXHAUSTED',
+      409,
+      `Notification job ${id} is ${state}, so there is nothing to retry`,
+    ),
+
   /**
    * Same Idempotency-Key, different endpoint or different body. Replaying the
    * stored response would be wrong, so this is rejected instead.
