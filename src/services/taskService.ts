@@ -13,8 +13,13 @@ import {
   insertAssignments,
   markAssignmentCompleted,
 } from '../repositories/assignmentRepository';
-import { insertNotificationJob } from '../repositories/notificationRepository';
+import {
+  findJobByTaskId,
+  insertNotificationJob,
+  listAttempts,
+} from '../repositories/notificationRepository';
 import { findMissingUserIds, findUserById } from '../repositories/userRepository';
+import { pool } from '../db/pool';
 import type { CreateTaskInput } from '../validation/schemas';
 
 export async function createTask(
@@ -140,4 +145,31 @@ export async function completeUserPart(
       pendingUsers,
       archivedNow,
     };
+}
+
+/**
+ * The delivery log for a task's archived-notification, as required by
+ * GET /tasks/:idTask/notifications.
+ *
+ * Read-only, so it runs on the pool rather than in a transaction.
+ */
+export async function listTaskNotifications(taskId: number) {
+  const task = await findTaskById(pool, taskId);
+  if (!task) throw errors.taskNotFound(taskId);
+
+  const job = await findJobByTaskId(pool, taskId);
+  const attempts = await listAttempts(pool, taskId);
+
+  return {
+    taskId,
+    // Absent while the task is still open: nothing has been queued yet.
+    notification: job ? { state: job.state, attemptsMade: job.attemptsMade } : null,
+    attempts: attempts.map((a) => ({
+      attemptNumber: a.attemptNumber,
+      attemptedAt: a.attemptedAt,
+      httpStatus: a.httpStatus,
+      outcome: a.outcome,
+      errorMessage: a.errorMessage,
+    })),
+  };
 }

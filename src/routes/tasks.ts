@@ -1,7 +1,12 @@
 import { Router } from 'express';
 import { runIdempotent } from '../http/idempotency';
 import { parseIdParam } from '../http/params';
-import { assignUsers, completeUserPart, createTask } from '../services/taskService';
+import {
+  assignUsers,
+  completeUserPart,
+  createTask,
+  listTaskNotifications,
+} from '../services/taskService';
 import {
   assignUsersSchema,
   completeTaskSchema,
@@ -61,6 +66,15 @@ tasksRouter.post('/tasks/:idTask/complete', async (req, res, next) => {
       };
     });
     res.status(status).type('application/json').send(raw);
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.get('/tasks/:idTask/notifications', async (req, res, next) => {
+  try {
+    const taskId = parseIdParam(req.params.idTask, 'idTask');
+    res.json(await listTaskNotifications(taskId));
   } catch (error) {
     next(error);
   }

@@ -67,6 +67,38 @@ Es un supuesto: Stripe sí guarda las respuestas de error. Se eligió lo contrar
 sólo exige que una operación repetida **se ejecute una sola vez**, y liberar la llave ante un fallo
 es más útil para el cliente que congelarle un error.
 
+## El despachador de notificaciones
+
+**La llamada HTTP nunca ocurre dentro de una transacción.** Con esperas crecientes hasta 3 intentos,
+la entrega puede tardar decenas de segundos: sostener una transacción ese tiempo bloquearía todo lo
+que toque esa tarea, y quien hizo `POST /complete` no puede esperar a que termine. Por eso la
+transacción que archiva **sólo encola** una fila en `notification_jobs`, y un despachador aparte la
+recoge.
+
+**Cómo se reclama un trabajo.** Un `UPDATE ... SET state='sending' WHERE id=? AND state='pending'`:
+por muchos despachadores que compitan, sólo uno ve `affectedRows = 1`, y sólo ése hace la llamada.
+Es la razón por la que correr **más de una instancia de la API no duplicaría el envío**.
+
+**Si el proceso muere a media entrega**, el trabajo queda en `sending`. Un barrido devuelve a
+`pending` las reclamaciones más viejas que el timeout más un margen, **sin contar el intento**: no se
+sabe si la petición llegó al destino, y el presupuesto de tres intentos no debería gastarse en una
+caída.
+
+**Política de reintentos:**
+
+| Resultado | Se reintenta |
+|---|---|
+| 2xx | No: éxito. |
+| 5xx | **Sí**, textual del enunciado. |
+| Sin respuesta o timeout | **Sí**, textual del enunciado. |
+| 4xx | **No.** El destino entendió y rechazó; la misma petición va a ser rechazada las tres veces. Es un supuesto y va al README. |
+
+**El timeout por intento no es opcional.** Sin él, un destino que acepta la conexión y nunca contesta
+dejaría la petición colgada para siempre, "sin respuesta" nunca ocurriría, y la política de
+reintentos jamás correría.
+
+Esperas: 1 s, 4 s, 16 s.
+
 ## Decisiones de arquitectura
 
 - **Capas `routes → controllers → services → repositories`.** Es la estructura que operé en
@@ -117,7 +149,7 @@ es más útil para el cliente que congelarle un error.
       `webhook.site` antes de entregar, o la notificación de F4 no tendrá a dónde llegar en la demo.
 - [x] ~~Archivado exactamente una vez~~ (F2, con contraprueba).
 - [x] ~~Idempotencia por `Idempotency-Key`~~ (F3).
-- [ ] Notificaciones con reintentos (F4).
+- [x] ~~Notificaciones con reintentos~~ (F4).
 - [ ] Decidir la mejora adicional al final, no antes.
 - [ ] Diagrama Mermaid del modelo de datos.
 
@@ -163,3 +195,13 @@ es más útil para el cliente que congelarle un error.
   tareas creadas de 24 peticiones. Más: misma llave secuencial, cuerpo distinto → 409, otro endpoint
   → 409, sin header → dos tareas distintas, y misma llave en `/complete` en paralelo → una sola
   notificación encolada.
+
+- **2026-08-25 — F4.** Outbox, despachador, reintentos y `GET /tasks/:idTask/notifications`.
+
+  **Verificado contra un destino de mentiras controlable**, los siete casos: 200 a la primera →
+  1 intento y `succeeded`; 500, 500, 200 → 3 intentos y `succeeded`; siempre 500 → 3 intentos y
+  `exhausted`; **400 → 1 solo intento**, sin reintentar; nunca responde → 3 intentos `no_response`
+  con `httpStatus` nulo; tarea abierta → `notification: null`; tarea inexistente → 404.
+
+  Y el punto que une F2 con F4: **8 tareas cerradas por dos usuarios en paralelo produjeron
+  exactamente 8 envíos**, un intento por tarea.
