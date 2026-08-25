@@ -43,3 +43,14 @@ export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type AssignUsersInput = z.infer<typeof assignUsersSchema>;
 export type CompleteTaskInput = z.infer<typeof completeTaskSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+
+/**
+ * `?status` accepts only the two documented values. An unrecognised one is a
+ * 400 rather than an empty list: silently returning nothing would look like
+ * "there are no tasks" when the real answer is "that filter is not a thing".
+ */
+export const taskStatusQuerySchema = z
+  .enum(['open', 'archived'], {
+    errorMap: () => ({ message: 'must be either open or archived' }),
+  })
+  .optional();

@@ -99,6 +99,17 @@ reintentos jamás correría.
 
 Esperas: 1 s, 4 s, 16 s.
 
+## Los endpoints de lectura
+
+Cada uno es **una sola consulta**, agrupada en memoria, en vez de listar y luego consultar por fila.
+Con N+1 el costo crece con el tamaño del resultado, y son justo los endpoints que un evaluador va a
+llamar primero.
+
+**El detalle que importa en `GET /users`:** la condición `a.completed_at IS NULL` va en el `ON` del
+`LEFT JOIN`, **no en el `WHERE`**. En el `WHERE` filtraría la fila nula que el `LEFT JOIN` produce
+para un usuario sin trabajo pendiente, y esos usuarios **desaparecerían de la lista**. Es la trampa
+clásica del `LEFT JOIN` con condición.
+
 ## Decisiones de arquitectura
 
 - **Capas `routes → controllers → services → repositories`.** Es la estructura que operé en
@@ -152,6 +163,7 @@ Esperas: 1 s, 4 s, 16 s.
 - [x] ~~Notificaciones con reintentos~~ (F4).
 - [ ] Decidir la mejora adicional al final, no antes.
 - [ ] Diagrama Mermaid del modelo de datos.
+- [ ] Tests automatizados en Vitest (F6).
 
 ---
 
@@ -205,3 +217,9 @@ Esperas: 1 s, 4 s, 16 s.
 
   Y el punto que une F2 con F4: **8 tareas cerradas por dos usuarios en paralelo produjeron
   exactamente 8 envíos**, un intento por tarea.
+
+- **2026-08-25 — F5.** Los cuatro endpoints de lectura. **Con esto están los nueve del enunciado.**
+  Verificado con datos que cubren los casos frontera: tarea con dos asignados y uno completado,
+  tarea archivada, **tarea sin ningún asignado** (aparece igual, gracias al `LEFT JOIN`), y usuarios
+  sin pendientes (que siguen apareciendo porque la condición va en el `ON`). Filtro `?status`
+  inválido → 400, usuario o tarea inexistente → 404.

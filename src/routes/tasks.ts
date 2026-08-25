@@ -11,7 +11,10 @@ import {
   assignUsersSchema,
   completeTaskSchema,
   createTaskSchema,
+  taskStatusQuerySchema,
 } from '../validation/schemas';
+import { errors } from '../http/errors';
+import { findTaskWithAssignees, listTasksWithAssignees } from '../repositories/readRepository';
 
 export const tasksRouter = Router();
 
@@ -75,6 +78,28 @@ tasksRouter.get('/tasks/:idTask/notifications', async (req, res, next) => {
   try {
     const taskId = parseIdParam(req.params.idTask, 'idTask');
     res.json(await listTaskNotifications(taskId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.get('/tasks', async (req, res, next) => {
+  try {
+    const status = taskStatusQuerySchema.parse(
+      req.query.status === undefined ? undefined : String(req.query.status),
+    );
+    res.json(await listTasksWithAssignees(status));
+  } catch (error) {
+    next(error);
+  }
+});
+
+tasksRouter.get('/tasks/:idTask', async (req, res, next) => {
+  try {
+    const taskId = parseIdParam(req.params.idTask, 'idTask');
+    const task = await findTaskWithAssignees(taskId);
+    if (!task) throw errors.taskNotFound(taskId);
+    res.json(task);
   } catch (error) {
     next(error);
   }
