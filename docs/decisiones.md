@@ -3,9 +3,6 @@
 Registro en crudo de cada decisión conforme se toma. **Es la materia prima del README**, que tiene
 límite de 2 páginas y por lo tanto no puede contener todo esto.
 
-Regla del proyecto: **nada se queda en el repo si no lo puedo explicar en voz alta.** El enunciado
-avisa que hay que defender cada decisión como propia.
-
 ---
 
 ## Decisiones de stack
