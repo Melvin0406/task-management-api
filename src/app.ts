@@ -6,8 +6,11 @@ import { notificationsRouter } from './routes/notifications';
 import { errorHandler, notFoundHandler } from './http/errorMiddleware';
 
 /**
- * Built as a factory rather than a module-level singleton so the integration
- * tests can mount the app with supertest without opening a port.
+ * Built as a factory rather than a module-level singleton so a caller decides
+ * what to do with it. index.ts listens and starts the notification dispatcher;
+ * the tests start their own server on an ephemeral port and deliberately leave
+ * the dispatcher stopped, so they drive delivery themselves instead of racing
+ * a background timer.
  */
 export function createApp(): Express {
   const app = express();
